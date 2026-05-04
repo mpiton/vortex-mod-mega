@@ -1,0 +1,11 @@
+[plugin]
+name = "vortex-mod-mega"
+version = "1.0.0"
+category = "hoster"
+author = "vortex-community"
+description = "MEGA hoster — resolves mega.nz public file URLs and exposes AES-128-CTR streaming decryption with per-chunk MAC verification"
+license = "GPL-3.0"
+min_vortex_version = "0.1.0"
+
+[capabilities]
+http = true
