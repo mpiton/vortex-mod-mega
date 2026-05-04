@@ -14,7 +14,7 @@
 //! corruption — `MegaDecryptor` exposes both the computed MAC and a
 //! convenience [`MegaDecryptor::verify_against`] helper.
 
-use aes::cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit};
+use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes128;
 use ctr::cipher::{KeyIvInit, StreamCipher};
 
@@ -204,6 +204,57 @@ fn xor16(dst: &mut [u8; 16], src: &[u8; 16]) {
     }
 }
 
+// ── ECB / CBC helpers (folder-listing decryption) ───────────────────────────
+//
+// MEGA encrypts per-node key blobs with AES-128-ECB (one or two blocks)
+// under the folder master key. Per-node attribute blobs (`a` field) are
+// AES-128-CBC encrypted with IV = 0₁₂₈ under the *node's* AES key. Both
+// are short enough that a streaming API is overkill — we expose
+// block-at-a-time helpers tested with deterministic vectors.
+
+/// Decrypt `blocks.len()` whole 16-byte blocks of AES-128-ECB ciphertext
+/// in place. `ciphertext` length must be a multiple of 16.
+pub fn aes128_ecb_decrypt(key: &[u8; 16], ciphertext: &mut [u8]) -> Result<(), PluginError> {
+    if !ciphertext.len().is_multiple_of(16) {
+        return Err(PluginError::InvalidKey(format!(
+            "AES-ECB input must be 16-byte aligned (got {} bytes)",
+            ciphertext.len()
+        )));
+    }
+    let aes = Aes128::new(key.into());
+    for block in ciphertext.chunks_exact_mut(16) {
+        aes.decrypt_block(GenericArray::from_mut_slice(block));
+    }
+    Ok(())
+}
+
+/// Decrypt AES-128-CBC with a fixed IV. `ciphertext` must be 16-byte aligned.
+/// Decryption proceeds block-by-block: `plaintext_i = AES_decrypt(c_i) ⊕ c_{i-1}`,
+/// where `c_{-1}` is the IV.
+pub fn aes128_cbc_decrypt(
+    key: &[u8; 16],
+    iv: &[u8; 16],
+    ciphertext: &mut [u8],
+) -> Result<(), PluginError> {
+    if !ciphertext.len().is_multiple_of(16) {
+        return Err(PluginError::InvalidKey(format!(
+            "AES-CBC input must be 16-byte aligned (got {} bytes)",
+            ciphertext.len()
+        )));
+    }
+    let aes = Aes128::new(key.into());
+    let mut prev: [u8; 16] = *iv;
+    for block in ciphertext.chunks_exact_mut(16) {
+        let curr_cipher: [u8; 16] = block.try_into().expect("len checked");
+        aes.decrypt_block(GenericArray::from_mut_slice(block));
+        for (b, p) in block.iter_mut().zip(prev.iter()) {
+            *b ^= *p;
+        }
+        prev = curr_cipher;
+    }
+    Ok(())
+}
+
 /// MEGA chunk schedule. chunk_size_at(0..7) = 128, 256, 384, 512, 640,
 /// 768, 896, 1024 KiB, then 1024 KiB forever.
 pub fn chunk_size_at(index: usize) -> u64 {
@@ -349,5 +400,62 @@ mod tests {
             dec.process(&mut buf);
         }
         let _mac = dec.finalize();
+    }
+
+    // ── ECB / CBC helpers ───────────────────────────────────────────────────
+
+    #[test]
+    fn aes128_ecb_decrypt_round_trips_two_blocks() {
+        // Self-encrypt then self-decrypt — verifies the decryption path
+        // reverses an AES-128 encryption with no chaining, which is exactly
+        // how MEGA wraps per-file 32-byte node keys with the folder key.
+        let key = [0x37u8; 16];
+        let plaintext: [u8; 32] = std::array::from_fn(|i| (i * 3) as u8);
+        let mut buf = plaintext;
+        let aes = Aes128::new(&key.into());
+        for block in buf.chunks_exact_mut(16) {
+            aes.encrypt_block(GenericArray::from_mut_slice(block));
+        }
+        // Now decrypt with our helper.
+        aes128_ecb_decrypt(&key, &mut buf).unwrap();
+        assert_eq!(buf, plaintext);
+    }
+
+    #[test]
+    fn aes128_ecb_decrypt_rejects_unaligned_input() {
+        let key = [0u8; 16];
+        let mut buf = [0u8; 17];
+        let err = aes128_ecb_decrypt(&key, &mut buf).unwrap_err();
+        assert!(matches!(err, PluginError::InvalidKey(_)));
+    }
+
+    #[test]
+    fn aes128_cbc_decrypt_round_trips_two_blocks() {
+        // CBC encrypt manually with our IV, then decrypt with helper.
+        let key = [0xA5u8; 16];
+        let iv = [0x42u8; 16];
+        let plaintext: [u8; 32] = std::array::from_fn(|i| i as u8);
+        let mut buf = plaintext;
+        // Manual CBC encrypt: c_i = AES_encrypt(p_i ⊕ c_{i-1}), c_{-1}=iv.
+        let aes = Aes128::new(&key.into());
+        let mut prev = iv;
+        for block in buf.chunks_exact_mut(16) {
+            for (b, p) in block.iter_mut().zip(prev.iter()) {
+                *b ^= *p;
+            }
+            aes.encrypt_block(GenericArray::from_mut_slice(block));
+            prev = block.try_into().unwrap();
+        }
+        aes128_cbc_decrypt(&key, &iv, &mut buf).unwrap();
+        assert_eq!(buf, plaintext);
+    }
+
+    #[test]
+    fn aes128_cbc_decrypt_rejects_unaligned_input() {
+        let key = [0u8; 16];
+        let iv = [0u8; 16];
+        let mut buf = [0u8; 31];
+        let err = aes128_cbc_decrypt(&key, &iv, &mut buf).unwrap_err();
+        assert!(matches!(err, PluginError::InvalidKey(_)));
     }
 }
