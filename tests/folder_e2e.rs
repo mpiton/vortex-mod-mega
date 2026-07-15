@@ -4,7 +4,7 @@
 //! then assert `extract_links` decrypts it back into a single child file
 //! with the expected handle, filename and size.
 //!
-//! Skipped unless the WASM artifact is present at
+//! Requires the WASM artifact at
 //! `target/wasm32-wasip1/release/vortex_mod_mega.wasm`.
 
 use std::path::PathBuf;
@@ -17,9 +17,14 @@ use extism::{Function, UserData, Val, PTR};
 
 const WASM_REL_PATH: &str = "target/wasm32-wasip1/release/vortex_mod_mega.wasm";
 
-fn wasm_path() -> Option<PathBuf> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(WASM_REL_PATH);
-    p.exists().then_some(p)
+fn wasm_path() -> PathBuf {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(WASM_REL_PATH);
+    assert!(
+        path.is_file(),
+        "missing release WASM artifact at {}; run `cargo build --target wasm32-wasip1 --release` first",
+        path.display()
+    );
+    path
 }
 
 fn xor_fold_aes_key(raw: &[u8; 32]) -> [u8; 16] {
@@ -105,15 +110,7 @@ fn load_plugin_with_stub(path: &PathBuf, stub: Function) -> extism::Plugin {
 
 macro_rules! require_wasm {
     () => {
-        match wasm_path() {
-            Some(p) => p,
-            None => {
-                eprintln!(
-                    "skipping: build with `cargo build --target wasm32-wasip1 --release` first"
-                );
-                return;
-            }
-        }
+        wasm_path()
     };
 }
 
