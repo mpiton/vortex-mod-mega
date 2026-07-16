@@ -21,7 +21,7 @@ ctr = "0.9"
 sha2 = "0.10"
 
 [dev-dependencies]
-extism = "1.0"
+extism = "=1.30.0"
 rstest = "0.24"
 hex-literal = "0.4"
 

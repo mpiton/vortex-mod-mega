@@ -34,7 +34,7 @@ sha256sum plugin.toml
 ## Test
 
 ```bash
-cargo test                   # native unit + WASM smoke (smoke skipped if .wasm absent)
+cargo test                   # native unit + mandatory WASM smoke
 cargo test --lib crypto      # crypto round-trip + memory-bounded streaming
 ```
 
