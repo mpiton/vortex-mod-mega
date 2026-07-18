@@ -1,15 +1,16 @@
 # vortex-mod-mega
 
-MEGA WASM plugin for [Vortex](https://github.com/vortex-app/vortex) — resolves `mega.nz` public file URLs and exposes the AES-128-CTR + chunk-MAC machinery the Vortex core engine needs to decrypt downloaded bytes and verify integrity.
+MEGA WASM plugin for [Vortex](https://github.com/vortex-app/vortex) — recognises `mega.nz` file and folder URLs. Downloads are refused until the Vortex host can decrypt MEGA payloads: MEGA CDN bytes are AES-128-CTR ciphertext, and without a host-side decryption pipeline a "successful" download would write unreadable bytes to disk (MAT-136 R-04).
 
 ## Status
 
-- File URL resolution (`https://mega.nz/file/<id>#<key>`) — done
-- AES-128-CTR streaming decryption (memory-bounded, native-tested) — done
-- Per-chunk CBC-MAC accumulator + final file-MAC fold — done
-- MAC mismatch detection (`PluginError::MacMismatch`) — done
-- Folder URL enumeration (`https://mega.nz/folder/<id>#<key>`) — done
-- AES-128-ECB unwrap of per-node keys + AES-128-CBC decrypt of attribute blobs — done
+- URL recognition (`can_handle` / `supports_playlist`) — active
+- Downloads (`extract_links` / `resolve_stream_url`) — refused with `DecryptionNotSupported` until host-side decryption ships
+- Library machinery, tested and ready to rewire (see git history for the previous export wiring):
+  - File URL resolution (`https://mega.nz/file/<id>#<key>`)
+  - AES-128-CTR streaming decryption (memory-bounded, native-tested)
+  - Per-chunk CBC-MAC accumulator + final file-MAC fold, MAC mismatch detection (`PluginError::MacMismatch`)
+  - Folder URL enumeration, AES-128-ECB unwrap of per-node keys + AES-128-CBC decrypt of attribute blobs
 
 ## Plugin contract
 
@@ -17,10 +18,10 @@ MEGA WASM plugin for [Vortex](https://github.com/vortex-app/vortex) — resolves
 |----------------------|-----------------------------------------------------------------------|
 | `can_handle`         | `"true"` for any `mega.nz/file/...` or `mega.nz/folder/...` URL.       |
 | `supports_playlist`  | `"true"` for folder URLs, `"false"` otherwise.                         |
-| `extract_links`      | File URL → JSON `{ kind: "file", files: [FileLink] }` with `EncryptionInfo`. Folder URL → `{ kind: "folder", files: [FileLink, ...] }` where each child carries a synthetic `https://mega.nz/file/<h>#<k>` URL and `direct_url = null` (host calls `resolve_stream_url` per child). |
-| `resolve_stream_url` | File URL → encrypted CDN URL (host fetches + decrypts in-stream).      |
+| `extract_links`      | Validates the URL, then refuses with an explicit "MEGA downloads are not supported yet" error. |
+| `resolve_stream_url` | Same refusal after URL validation.                                     |
 
-`FileLink.encryption.scheme = "mega-aes128-ctr"` carries the per-file AES key, IV and `metaMac` (all hex-encoded). Hosts must run the bytes from `direct_url` through `MegaDecryptor::process` and verify with `MegaDecryptor::verify_against(meta_mac)`.
+The `MegaDecryptor` (AES-128-CTR + chunk-MAC) stays in the library for the release that wires host-side decryption; no export hands out an encrypted CDN URL in the meantime.
 
 ## Build
 
