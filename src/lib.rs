@@ -3,8 +3,8 @@
 //! Implements the plugin contract used by the Vortex plugin host:
 //! - `can_handle(url)` → `"true"` / `"false"`
 //! - `supports_playlist(url)` → `"true"` for folder URLs, `"false"` otherwise
-//! - `extract_links(url)` → JSON metadata for a single MEGA file
-//! - `resolve_stream_url(input)` → encrypted CDN URL (host fetches + decrypts)
+//! - `extract_links(url)` / `resolve_stream_url(input)` → refused with an
+//!   explicit error until the host can decrypt MEGA payloads (MAT-136 R-04)
 //!
 //! Network access is delegated to the host via `http_request`. All parsing
 //! and crypto is pure (`url_matcher.rs`, `key_parser.rs`, `crypto.rs`,

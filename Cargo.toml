@@ -1,6 +1,6 @@
 [package]
 name = "vortex-mod-mega"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "MEGA WASM plugin for Vortex — resolves mega.nz files/folders and exposes AES-128-CTR + chunk MAC for host-side decryption"
 license = "GPL-3.0"
