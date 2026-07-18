@@ -34,6 +34,9 @@ pub enum PluginError {
 
     #[error("MAC mismatch: file integrity check failed")]
     MacMismatch,
+
+    #[error("MEGA downloads are not supported yet: files are end-to-end encrypted (AES-128-CTR) and Vortex cannot decrypt them during download")]
+    DecryptionNotSupported,
 }
 
 #[cfg(test)]
@@ -57,6 +60,13 @@ mod tests {
     #[test]
     fn api_error_includes_code() {
         assert!(PluginError::ApiError(-9).to_string().contains("-9"));
+    }
+
+    #[test]
+    fn decryption_not_supported_names_the_reason() {
+        let msg = PluginError::DecryptionNotSupported.to_string();
+        assert!(msg.contains("not supported yet"), "{msg}");
+        assert!(msg.contains("encrypted"), "{msg}");
     }
 
     #[test]

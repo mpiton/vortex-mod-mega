@@ -12,7 +12,7 @@
 use std::path::PathBuf;
 
 use extism::{Function, UserData, Val, PTR};
-use serde_json::{json, Value};
+use serde_json::json;
 
 const WASM_REL_PATH: &str = "target/wasm32-wasip1/release/vortex_mod_mega.wasm";
 const FILE_URL: &str = "https://mega.nz/file/AbCdEfGh#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -100,20 +100,25 @@ fn wasm_supports_playlist_false_for_file() {
 }
 
 #[test]
-fn wasm_extraction_and_resolution_exports_are_callable() {
+fn wasm_extraction_and_resolution_exports_refuse_until_decryption_ships() {
     let path = require_wasm!();
     let mut plugin = load_plugin(&path);
 
-    let links: String = plugin
-        .call("extract_links", FILE_URL)
-        .expect("extract_links call");
-    let links: Value = serde_json::from_str(&links).expect("extract_links JSON");
-    assert_eq!(links["kind"], "file");
-    assert_eq!(links["files"][0]["direct_url"], DIRECT_URL);
-    assert_eq!(links["files"][0]["size_bytes"], 4_194_304);
+    // MAT-136 R-04: both download-facing exports must refuse for a valid MEGA
+    // URL instead of handing the host an encrypted CDN URL.
+    let err = plugin
+        .call::<&str, String>("extract_links", FILE_URL)
+        .expect_err("extract_links must refuse");
+    assert!(
+        err.to_string().contains("not supported yet"),
+        "unexpected extract_links error: {err}"
+    );
 
-    let direct_url: String = plugin
-        .call("resolve_stream_url", json!({ "url": FILE_URL }).to_string())
-        .expect("resolve_stream_url call");
-    assert_eq!(direct_url, DIRECT_URL);
+    let err = plugin
+        .call::<String, String>("resolve_stream_url", json!({ "url": FILE_URL }).to_string())
+        .expect_err("resolve_stream_url must refuse");
+    assert!(
+        err.to_string().contains("not supported yet"),
+        "unexpected resolve_stream_url error: {err}"
+    );
 }
