@@ -22,8 +22,6 @@ sha2 = "0.10"
 
 [dev-dependencies]
 extism = "=1.30.0"
-rstest = "0.26.1"
-hex-literal = "1.1.0"
 
 [profile.release]
 opt-level = "z"
